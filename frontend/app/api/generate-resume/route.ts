@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, TabStopType, TabStopPosition } from 'docx'
 import fs from 'fs'
 import { writeFile, unlink } from 'fs/promises'
+import puppeteer from 'puppeteer-core'
+import chromium from '@sparticuz/chromium'
 
 // Helper function to create a paragraph with bottom border
 function createParagraphWithBottomBorder(text: string, fontSize: number = 14): Paragraph {
@@ -23,6 +25,174 @@ function createParagraphWithBottomBorder(text: string, fontSize: number = 14): P
       },
     },
   })
+}
+
+// Helper function to generate HTML from resume data
+function generateResumeHTML(data: any): string {
+  const escapeHtml = (text: string) => {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+  }
+
+  let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      margin: 1in 0.5in;
+    }
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      line-height: 1.5;
+      color: #000;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .name {
+      font-size: 30pt;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .contact {
+      font-size: 11pt;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 14pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      border-bottom: 1px solid #000;
+      padding-bottom: 2px;
+      margin-bottom: 10px;
+    }
+    .company {
+      font-size: 13pt;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    .role {
+      font-size: 11pt;
+      font-weight: bold;
+      font-style: italic;
+      display: inline-block;
+    }
+    .dates {
+      font-size: 11pt;
+      float: right;
+    }
+    .bullet-point {
+      margin-left: 20px;
+      margin-bottom: 5px;
+      font-size: 11pt;
+    }
+    .skill-category {
+      font-size: 11pt;
+      margin-bottom: 5px;
+    }
+    .skill-label {
+      font-weight: bold;
+    }
+    .institution {
+      font-size: 13pt;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    .degree {
+      font-size: 11pt;
+      font-weight: bold;
+      font-style: italic;
+      display: inline-block;
+    }
+    .clearfix::after {
+      content: "";
+      display: table;
+      clear: both;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">${escapeHtml(data.name || 'Your Name')}</div>
+    <div class="contact">${escapeHtml(data.contact_info || 'your.email@example.com | (555) 123-4567')}</div>
+  </div>`
+
+  if (data.summary) {
+    html += `  <div class="section">
+    <p>${escapeHtml(data.summary)}</p>
+  </div>`
+  }
+
+  if (data.work_experience && data.work_experience.length > 0) {
+    html += `  <div class="section">
+    <div class="section-title">Relevant Work Experience</div>`
+    
+    for (const exp of data.work_experience) {
+      html += `    <div style="margin-bottom: 15px;">
+      <div class="company">${escapeHtml(exp.company || 'Company Name')}</div>
+      <div class="clearfix">
+        <span class="role">${escapeHtml(exp.title || 'Job Title')}</span>
+        <span class="dates">${escapeHtml(exp.dates || 'Date Range')}</span>
+      </div>`
+      
+      if (exp.items && exp.items.length > 0) {
+        for (const item of exp.items.filter((i: string) => i.trim())) {
+          html += `      <div class="bullet-point">• ${escapeHtml(item)}</div>`
+        }
+      }
+      
+      html += `    </div>`
+    }
+    
+    html += `  </div>`
+  }
+
+  if (data.skills && data.skills.length > 0) {
+    html += `  <div class="section">
+    <div class="section-title">Skills</div>`
+    
+    for (const skill of data.skills) {
+      html += `    <div class="skill-category">
+      <span class="skill-label">${escapeHtml(skill.section_title || 'Category')}:</span> ${escapeHtml(skill.skills || 'Skills list')}
+    </div>`
+    }
+    
+    html += `  </div>`
+  }
+
+  if (data.education && data.education.length > 0) {
+    html += `  <div class="section">
+    <div class="section-title">Education</div>`
+    
+    for (const edu of data.education) {
+      html += `    <div style="margin-bottom: 10px;">
+      <div class="institution">${escapeHtml(edu.institution || 'Institution Name')}</div>
+      <div class="clearfix">
+        <span class="degree">${escapeHtml(edu.degree || 'Degree')}</span>
+        <span class="dates">${escapeHtml(edu.dates || 'Date Range')}</span>
+      </div>
+    </div>`
+    }
+    
+    html += `  </div>`
+  }
+
+  html += `</body>
+</html>`
+
+  return html
 }
 
 export async function POST(request: NextRequest) {
@@ -276,36 +446,99 @@ export async function POST(request: NextRequest) {
       },
     })
     
-    // Generate DOCX file
-    const buffer = await Packer.toBuffer(doc)
-    await writeFile(docxPath, buffer)
+    let fileBuffer: Buffer
+    let contentType: string
+    let extension: string
     
-    // For PDF, we'll return DOCX for now (PDF conversion requires additional setup)
-    // In a production environment, you might want to use a service like CloudConvert API
-    const actualFormat = format === 'pdf' ? 'docx' : format
-    const outputPath = actualFormat === 'pdf' ? pdfPath : docxPath
-    
-    // If PDF was requested but we're returning DOCX, note it
-    if (format === 'pdf' && actualFormat === 'docx') {
-      console.warn('PDF generation not available on Vercel. Returning DOCX instead.')
+    if (format === 'pdf') {
+      // Generate PDF using Puppeteer
+      const html = generateResumeHTML(data)
+      
+      // Configure Chromium for Vercel/serverless
+      const launchOptions: any = {
+        args: isVercel ? chromium.args : [],
+        defaultViewport: { width: 1920, height: 1080 },
+        headless: true,
+      }
+      
+      if (isVercel) {
+        // Use Chromium binary for Vercel
+        launchOptions.executablePath = await chromium.executablePath()
+      } else {
+        // Use system Chrome in local dev - try to find it automatically
+        // Try common Chrome paths on macOS, Linux, and Windows
+        const possiblePaths = [
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
+          '/usr/bin/google-chrome', // Linux
+          '/usr/bin/chromium-browser', // Linux (Chromium)
+          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
+          'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe', // Windows 32-bit
+        ]
+        
+        // Try to find Chrome executable
+        let chromePath: string | undefined
+        for (const path of possiblePaths) {
+          if (fs.existsSync(path)) {
+            chromePath = path
+            break
+          }
+        }
+        
+        if (chromePath) {
+          launchOptions.executablePath = chromePath
+        } else {
+          // Fallback: try channel option (works if Chrome is in PATH)
+          launchOptions.channel = 'chrome'
+        }
+      }
+      
+      const browser = await puppeteer.launch(launchOptions)
+      
+      try {
+        const page = await browser.newPage()
+        await page.setContent(html, { waitUntil: 'networkidle0' })
+        
+        // Generate PDF
+        const pdfBuffer = await page.pdf({
+          format: 'Letter',
+          margin: {
+            top: '1in',
+            right: '0.5in',
+            bottom: '1in',
+            left: '0.5in',
+          },
+          printBackground: true,
+        })
+        
+        await browser.close()
+        
+        // Convert Uint8Array to Buffer
+        fileBuffer = Buffer.from(pdfBuffer)
+        contentType = 'application/pdf'
+        extension = 'pdf'
+      } catch (error) {
+        await browser.close()
+        throw error
+      }
+    } else {
+      // Generate DOCX file
+      const buffer = await Packer.toBuffer(doc)
+      await writeFile(docxPath, buffer)
+      fileBuffer = fs.readFileSync(docxPath)
+      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      extension = 'docx'
     }
     
-    // Read the file
-    const fileBuffer = fs.readFileSync(docxPath)
-    const contentType = actualFormat === 'pdf' 
-      ? 'application/pdf' 
-      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    const extension = actualFormat === 'pdf' ? 'pdf' : 'docx'
-    
-    // Clean up temp files after a delay
-    setTimeout(async () => {
-      try {
-        if (fs.existsSync(docxPath)) await unlink(docxPath)
-        if (actualFormat === 'pdf' && fs.existsSync(pdfPath)) await unlink(pdfPath)
-      } catch (e) {
-        console.error('Error cleaning up temp files:', e)
-      }
-    }, 5000)
+    // Clean up temp files after a delay (only for DOCX)
+    if (format !== 'pdf') {
+      setTimeout(async () => {
+        try {
+          if (fs.existsSync(docxPath)) await unlink(docxPath)
+        } catch (e) {
+          console.error('Error cleaning up temp files:', e)
+        }
+      }, 5000)
+    }
     
     // Generate download filename
     const downloadBaseName = (data.name || 'resume').replace(/[^a-zA-Z0-9]/g, '_') || 'resume'
@@ -320,16 +553,12 @@ export async function POST(request: NextRequest) {
     const downloadTimestamp = `${month}-${day}-${year}_${hour12}-${minutes}${ampm}`
     const downloadFilename = `${downloadBaseName}_${downloadTimestamp}.${extension}`
     
-    const response = new NextResponse(fileBuffer, {
+    const response = new NextResponse(new Uint8Array(fileBuffer), {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${downloadFilename}"`,
       },
     })
-    
-    if (format === 'pdf' && actualFormat === 'docx') {
-      response.headers.set('X-PDF-Fallback', 'true')
-    }
     
     return response
   } catch (error) {

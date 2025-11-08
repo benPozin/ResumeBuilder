@@ -146,10 +146,6 @@ export default function Home() {
         throw new Error(errorMsg)
       }
 
-      // Check if PDF generation fell back to DOCX
-      const pdfFallback = response.headers.get('X-PDF-Fallback') === 'true'
-      const actualFormat = pdfFallback ? 'docx' : format
-      
       // Get the blob and create download link
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
@@ -166,17 +162,13 @@ export default function Home() {
       const hour12 = hours % 12 || 12 // Convert to 12-hour format
       const timestamp = `${month}-${day}-${year}_${hour12}-${minutes}${ampm}`
       const baseName = resumeData.name.replace(/[^a-zA-Z0-9]/g, '_') || 'resume'
-      a.download = `${baseName}_${timestamp}.${actualFormat}`
+      a.download = `${baseName}_${timestamp}.${format}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       
-      if (pdfFallback) {
-        setMessage(`PDF generation failed (permission issue). DOCX file downloaded instead. You can convert it to PDF manually using Word or other tools.`)
-      } else {
-        setMessage(`Resume generated successfully as ${actualFormat.toUpperCase()}!`)
-      }
+      setMessage(`Resume generated successfully as ${format.toUpperCase()}!`)
       setTimeout(() => setMessage(''), 5000)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
