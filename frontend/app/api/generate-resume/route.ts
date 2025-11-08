@@ -19,6 +19,7 @@ function createParagraphWithBottomBorder(text: string, fontSize: number = 14): P
         color: '000000',
         size: 6,
         space: 1,
+        style: 'single' as const,
       },
     },
   })
