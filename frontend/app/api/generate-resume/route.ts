@@ -12,13 +12,14 @@ export async function POST(request: NextRequest) {
     const data = await request.json()
     const format = request.nextUrl.searchParams.get('format') || 'docx'
     
-    // process.cwd() in Next.js API routes is the frontend directory
-    // Go up one level to get to ResumeBuilder root
-    const projectRoot = path.join(process.cwd(), '..')
-    const tempDir = path.join(projectRoot, 'temp')
+    // In Vercel/serverless environments, use /tmp (only writable directory)
+    // In local dev, use project temp directory
+    const isVercel = process.env.VERCEL === '1' || !fs.existsSync(path.join(process.cwd(), '..', 'temp'))
+    const tempDir = isVercel ? '/tmp' : path.join(process.cwd(), '..', 'temp')
+    const projectRoot = isVercel ? path.join(process.cwd(), '..') : path.join(process.cwd(), '..')
     
-    // Create temp directory if it doesn't exist
-    if (!fs.existsSync(tempDir)) {
+    // Create temp directory if it doesn't exist (only needed for local dev)
+    if (!isVercel && !fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true })
     }
     
@@ -54,7 +55,23 @@ def redirect_stdout(stream):
     finally:
         sys.stdout = old_stdout
 
-sys.path.insert(0, r'${projectRoot.replace(/\\/g, '/')}')
+# Add project root to path - handle both local and Vercel environments
+project_root = r'${projectRoot.replace(/\\/g, '/')}'
+if os.path.exists(project_root):
+    sys.path.insert(0, project_root)
+else:
+    # Fallback: try to find resume_builder.py in common locations
+    import sys as sys_module
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), '..', '..'),
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    ]
+    for possible_path in possible_paths:
+        abs_path = os.path.abspath(possible_path)
+        if os.path.exists(os.path.join(abs_path, 'resume_builder.py')):
+            sys.path.insert(0, abs_path)
+            project_root = abs_path
+            break
 
 from resume_builder import Resume
 
@@ -130,9 +147,12 @@ else:
     await writeFile(scriptPath, pythonScript)
     
     // Execute Python script
-    const { stdout, stderr } = await execAsync(
-      `cd "${projectRoot}" && python3 "${scriptPath}"`
-    )
+    // In Vercel, we need to ensure Python can find the modules
+    const pythonPath = isVercel 
+      ? `PYTHONPATH="${projectRoot}:$PYTHONPATH" python3 "${scriptPath}"`
+      : `cd "${projectRoot}" && python3 "${scriptPath}"`
+    
+    const { stdout, stderr } = await execAsync(pythonPath)
     
     if (stderr && !stderr.includes('Ignoring wrong pointing object')) {
       console.error('Python stderr:', stderr)
