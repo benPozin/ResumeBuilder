@@ -61,18 +61,43 @@ export default function Home() {
     setLoading(true)
     setMessage('')
     try {
-      const response = await fetch(`${API_BASE_URL}/sample-data?example=true`)
+      console.log('Fetching sample data from:', `${API_BASE_URL}/sample-data?example=true`)
+      const response = await fetch(`${API_BASE_URL}/sample-data?example=true`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      console.log('Response status:', response.status, response.statusText)
+      
       if (!response.ok) {
         let errorData
         try {
           errorData = await response.json()
         } catch {
-          errorData = { error: `Server returned ${response.status}: ${response.statusText}` }
+          const text = await response.text()
+          errorData = { error: `Server returned ${response.status}: ${response.statusText}. Response: ${text}` }
         }
         throw new Error(errorData.error || errorData.message || `Backend returned ${response.status}: ${response.statusText}`)
       }
+      
       const data = await response.json()
-      setResumeData(data)
+      console.log('Received data:', data)
+      
+      // Validate data structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid data format received')
+      }
+      
+      setResumeData({
+        name: data.name || '',
+        contact_info: data.contact_info || '',
+        summary: data.summary || '',
+        work_experience: Array.isArray(data.work_experience) ? data.work_experience : [],
+        skills: Array.isArray(data.skills) ? data.skills : [],
+        education: Array.isArray(data.education) ? data.education : [],
+      })
       setMessage('Example data loaded! You can edit it or clear it to start fresh.')
       setTimeout(() => setMessage(''), 3000)
     } catch (error) {

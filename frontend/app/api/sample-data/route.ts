@@ -68,8 +68,10 @@ const sampleData = {
 
 export async function GET(request: NextRequest) {
   try {
-    const url = new URL(request.url)
-    const loadExample = url.searchParams.get('example') === 'true'
+    // Use request.nextUrl for Next.js API routes
+    const loadExample = request.nextUrl.searchParams.get('example') === 'true'
+    
+    console.log('Sample data request:', { loadExample, url: request.nextUrl.toString() })
     
     // Return empty template by default - users start fresh
     if (!loadExample) {
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Return sample data
+    console.log('Returning sample data:', sampleData)
     return NextResponse.json(sampleData, {
       headers: {
         'Content-Type': 'application/json',
@@ -92,7 +95,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error loading sample data:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Full error:', errorMessage)
+    console.error('Full error:', errorMessage, error)
     
     // Return empty template on error
     return NextResponse.json({
