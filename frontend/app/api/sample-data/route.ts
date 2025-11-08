@@ -68,7 +68,8 @@ const sampleData = {
 
 export async function GET(request: NextRequest) {
   try {
-    const loadExample = request.nextUrl?.searchParams?.get('example') === 'true' || false
+    const url = new URL(request.url)
+    const loadExample = url.searchParams.get('example') === 'true'
     
     // Return empty template by default - users start fresh
     if (!loadExample) {
@@ -83,9 +84,16 @@ export async function GET(request: NextRequest) {
     }
     
     // Return sample data
-    return NextResponse.json(sampleData)
+    return NextResponse.json(sampleData, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
   } catch (error) {
     console.error('Error loading sample data:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Full error:', errorMessage)
+    
     // Return empty template on error
     return NextResponse.json({
       name: "",
@@ -94,6 +102,6 @@ export async function GET(request: NextRequest) {
       work_experience: [],
       skills: [],
       education: []
-    })
+    }, { status: 200 }) // Return 200 even on error to prevent frontend issues
   }
 }

@@ -58,6 +58,8 @@ export default function Home() {
   // No need to load sample data on mount
 
   const loadExampleData = async () => {
+    setLoading(true)
+    setMessage('')
     try {
       const response = await fetch(`${API_BASE_URL}/sample-data?example=true`)
       if (!response.ok) {
@@ -76,6 +78,9 @@ export default function Home() {
     } catch (error) {
       console.error('Error loading example data:', error)
       setMessage(`Error: Could not load example data. ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setTimeout(() => setMessage(''), 5000)
+    } finally {
+      setLoading(false)
     }
   }
 
