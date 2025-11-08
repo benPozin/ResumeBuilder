@@ -1,209 +1,169 @@
-# Resume Parser
+# Resume Builder
 
-A Python tool that extracts and structures resume data from DOCX files, converting them into organized JSON and Markdown formats.
+A modern, full-stack resume builder application with a beautiful React/Next.js frontend and Python backend for generating professional DOCX and PDF resumes.
 
 ## Features
 
-- **DOCX Text Extraction**: Extracts plain text from DOCX files using only Python standard library
-- **Intelligent Parsing**: Automatically identifies and parses resume sections:
-  - Header (name, contact info, summary)
-  - Work Experience
-  - Skills (categorized)
-  - Education
-- **Multiple Output Formats**: Generates JSON, Markdown, and plain text versions
-- **Command Line Interface**: Easy-to-use CLI for batch processing
-- **No External Dependencies**: Uses only Python standard library modules
+- 🎨 **Modern UI**: Beautiful, responsive interface built with Next.js, React, and Tailwind CSS
+- 🌓 **Dark Mode**: Seamless dark/light theme switching
+- 📝 **Live Preview**: Real-time preview of your resume as you type
+- 📄 **Multiple Formats**: Generate resumes in both DOCX and PDF formats
+- 🎯 **User-Friendly**: Intuitive forms for all resume sections
+- ⚡ **Fast**: Built with Next.js 16 and React 19 for optimal performance
 
-## Installation
+## Tech Stack
 
-1. Clone or download this repository
-2. Ensure you have Python 3.6+ installed
-3. No additional dependencies required!
+### Frontend
+- **Next.js 16** - React framework with App Router
+- **React 19** - UI library
+- **TypeScript** - Type safety
+- **Tailwind CSS 4** - Styling
+- **Theme Provider** - Dark/light mode support
 
-```bash
-# Optional: Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+### Backend
+- **Python 3** - Core logic
+- **python-docx** - DOCX generation
+- **pypdf** - PDF manipulation
+- **docx2pdf** - DOCX to PDF conversion
+
+## Project Structure
+
 ```
+ResumeBuilder/
+├── frontend/              # Next.js application
+│   ├── app/              # Next.js app directory
+│   │   ├── api/          # API routes
+│   │   ├── page.tsx      # Main page
+│   │   └── layout.tsx    # Root layout
+│   ├── components/       # React components
+│   └── package.json      # Frontend dependencies
+├── resume_builder.py     # Python resume generation logic
+├── positions.py          # Sample data
+├── requirements.txt      # Python dependencies
+└── README.md            # This file
+```
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Python 3.8+
+- macOS (for PDF generation - requires Microsoft Word)
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/benPozin/ResumeBuilder.git
+   cd ResumeBuilder
+   ```
+
+2. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Install frontend dependencies**
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+4. **Run the development server**
+   ```bash
+   npm run dev
+   ```
+
+5. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
 
 ## Usage
 
-### Command Line Usage
+1. **Fill out the form**: Enter your personal information, work experience, skills, and education
+2. **Preview**: See your resume update in real-time in the preview panel
+3. **Generate**: Click "Generate DOCX" or "Generate PDF" to create your resume file
+4. **Download**: Your resume will be automatically downloaded
+
+## Deployment
+
+### Vercel (Frontend)
+
+The frontend is configured to deploy on Vercel. The `vercel.json` file tells Vercel that the Next.js app is in the `frontend` directory.
+
+**Important**: In your Vercel project settings, set:
+- **Root Directory**: `frontend`
+- **Build Command**: `npm run build`
+- **Output Directory**: `.next`
+
+Or simply connect your GitHub repository and Vercel will auto-detect the Next.js app.
+
+### Backend API
+
+The API routes in `frontend/app/api/` handle resume generation by calling the Python scripts. These work seamlessly on Vercel's serverless functions.
+
+## Development
+
+### Running Locally
 
 ```bash
-# Basic usage
-python resume_parser.py path/to/resume.docx
+# Terminal 1: Frontend
+cd frontend
+npm run dev
 
-# Specify output directory
-python resume_parser.py path/to/resume.docx -o my_output_folder
-
-# Help
-python resume_parser.py --help
+# Terminal 2: Backend (optional - only needed if using Flask)
+cd ..
+python3 app.py
 ```
 
-### Programmatic Usage
+### Building for Production
 
-```python
-from resume_parser import parse_resume
-
-# Parse a resume and get structured data
-resume_data = parse_resume("path/to/resume.docx", output_dir="output")
-
-# Access parsed data
-print(f"Name: {resume_data['name']}")
-print(f"Experience entries: {len(resume_data['experience'])}")
+```bash
+cd frontend
+npm run build
+npm start
 ```
 
-## Output Files
+## Configuration
 
-For each processed resume, the tool generates:
+### Theme Customization
 
-1. **`{filename}_resume.json`** - Structured JSON data with all parsed information
-2. **`{filename}_resume.md`** - Formatted Markdown version
-3. **`{filename}_resume.txt`** - Plain text extraction
+The theme colors can be customized in `frontend/app/globals.css`:
 
-### JSON Structure
-
-```json
-{
-  "name": "John Doe",
-  "contacts": "john@example.com | (555) 123-4567 | linkedin.com/in/johndoe",
-  "summary": "Experienced software engineer with 5+ years...",
-  "experience": [
-    {
-      "company": "Tech Corp",
-      "title": "Senior Software Engineer",
-      "dates": "2020 to Present",
-      "highlights": [
-        "Led development of microservices architecture",
-        "Improved system performance by 40%"
-      ]
-    }
-  ],
-  "skills": {
-    "Programming": ["Python", "JavaScript", "Java"],
-    "Tools": ["Git", "Docker", "AWS"],
-    "Databases": ["PostgreSQL", "MongoDB"]
-  },
-  "education": [
-    {
-      "institution": "University of Technology",
-      "details": "Bachelor of Science in Computer Science",
-      "dates": "2015–2019"
-    }
-  ],
-  "source_file": "resume.docx",
-  "generated_at": "2024-01-15T10:30:00Z"
+```css
+@theme {
+  --color-dark-bg: #0a0a0a;
+  --color-dark-surface: #111111;
+  --color-dark-card: #1a1a1a;
+  --color-dark-border: #2a2a2a;
+  --color-dark-text: #e5e5e5;
+  --color-dark-text-muted: #a3a3a3;
 }
 ```
 
-## How It Works
+## Troubleshooting
 
-1. **Text Extraction**: Opens DOCX as ZIP file and extracts text from `document.xml`
-2. **Section Detection**: Identifies headers using uppercase patterns and known keywords
-3. **Content Parsing**: 
-   - Header: Extracts name, contact info, and summary
-   - Experience: Detects company names and parses job details
-   - Skills: Categorizes skills by type (Programming, Tools, etc.)
-   - Education: Extracts institution and degree information
-4. **Output Generation**: Creates structured JSON, formatted Markdown, and plain text
+### PDF Generation Issues
 
-## Supported Resume Formats
+- **macOS**: PDF generation requires Microsoft Word to be installed
+- **File Permissions**: You may be prompted to grant file access permissions
+- **Alternative**: Generate DOCX and convert manually using Word or online tools
 
-The parser works best with resumes that have:
-- Clear section headers (uppercase or title case)
-- Standard sections: Experience, Skills, Education
-- Company names in uppercase or title case
-- Date ranges in recognizable formats
+### Build Errors
 
-## Limitations
-
-- Designed for standard resume formats
-- May require adjustment for non-standard layouts
-- Relies on text patterns for section detection
-- Does not preserve original formatting (fonts, colors, etc.)
-
-## Examples
-
-### Sample Input (DOCX)
-```
-JOHN DOE
-john@example.com | (555) 123-4567 | linkedin.com/in/johndoe
-
-Experienced software engineer with 5+ years of experience...
-
-RELEVANT WORK EXPERIENCE
-
-TECH CORP
-Senior Software Engineer
-2020 to Present
-- Led development of microservices architecture
-- Improved system performance by 40%
-
-SKILLS
-Programming: Python, JavaScript, Java
-Tools: Git, Docker, AWS
-Databases: PostgreSQL, MongoDB
-
-EDUCATION
-University of Technology
-Bachelor of Science in Computer Science
-2015–2019
-```
-
-### Sample Output (Markdown)
-```markdown
-# JOHN DOE
-
-john@example.com | (555) 123-4567 | linkedin.com/in/johndoe
-
-Experienced software engineer with 5+ years of experience...
-
-## Experience
-**TECH CORP**  
-*Senior Software Engineer*  
-2020 to Present
-- Led development of microservices architecture
-- Improved system performance by 40%
-
-## Skills
-**Programming:** Python, JavaScript, Java
-**Tools:** Git, Docker, AWS
-**Databases:** PostgreSQL, MongoDB
-
-## Education
-**University of Technology**
-Bachelor of Science in Computer Science
-2015–2019
-```
+- Ensure all dependencies are installed: `npm install` in the frontend directory
+- Clear Next.js cache: `rm -rf frontend/.next`
+- Check Node.js version: Requires Node.js 18+
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test with sample resumes
-5. Submit a pull request
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
 This project is open source and available under the MIT License.
 
-## Troubleshooting
+## Author
 
-### Common Issues
-
-1. **"File not found" error**: Ensure the DOCX file path is correct
-2. **Empty output**: Check if the DOCX file is corrupted or has unusual formatting
-3. **Missing sections**: The parser may not detect non-standard section headers
-
-### Getting Help
-
-If you encounter issues:
-1. Check that your DOCX file is not corrupted
-2. Verify the resume has standard section headers
-3. Try with a simpler resume format first
-4. Check the console output for parsing details
-
-
-
+**Ben Pozin**
+- GitHub: [@benPozin](https://github.com/benPozin)
