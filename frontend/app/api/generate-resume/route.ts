@@ -1,11 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import path from 'path'
+import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, TabStopType, TabStopPosition } from 'docx'
 import fs from 'fs'
 import { writeFile, unlink } from 'fs/promises'
 
-const execAsync = promisify(exec)
+// Helper function to create a paragraph with bottom border
+function createParagraphWithBottomBorder(text: string, fontSize: number = 14): Paragraph {
+  return new Paragraph({
+    children: [
+      new TextRun({
+        text: text.toUpperCase(),
+        bold: true,
+        size: fontSize * 2, // docx uses half-points
+        font: 'Times New Roman',
+      }),
+    ],
+    border: {
+      bottom: {
+        color: '000000',
+        size: 6,
+        space: 1,
+      },
+    },
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,201 +30,295 @@ export async function POST(request: NextRequest) {
     const format = request.nextUrl.searchParams.get('format') || 'docx'
     
     // In Vercel/serverless environments, use /tmp (only writable directory)
-    // In local dev, use project temp directory
-    const isVercel = process.env.VERCEL === '1' || !fs.existsSync(path.join(process.cwd(), '..', 'temp'))
-    const tempDir = isVercel ? '/tmp' : path.join(process.cwd(), '..', 'temp')
-    const projectRoot = isVercel ? path.join(process.cwd(), '..') : path.join(process.cwd(), '..')
+    const isVercel = process.env.VERCEL === '1' || !fs.existsSync(process.cwd() + '/../temp')
+    const tempDir = isVercel ? '/tmp' : process.cwd() + '/../temp'
     
     // Create temp directory if it doesn't exist (only needed for local dev)
     if (!isVercel && !fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true })
     }
     
-    // Generate a unique filename with timestamp and random component
+    // Generate a unique filename
     const baseName = (data.name || 'resume').replace(/[^a-zA-Z0-9]/g, '_') || 'resume'
     const timestamp = Date.now()
-    const randomId = Math.random().toString(36).substring(2, 9) // Add random component for uniqueness
+    const randomId = Math.random().toString(36).substring(2, 9)
     const uniqueId = `${timestamp}_${randomId}`
     const filename = `${baseName}_${uniqueId}`
-    const docxPath = path.join(tempDir, `${filename}.docx`)
-    const pdfPath = path.join(tempDir, `${filename}.pdf`)
-    const scriptPath = path.join(tempDir, `generate_${uniqueId}.py`)
-    const dataPath = path.join(tempDir, `data_${uniqueId}.json`)
+    const docxPath = `${tempDir}/${filename}.docx`
+    const pdfPath = `${tempDir}/${filename}.pdf`
     
-    // Write data to JSON file
-    await writeFile(dataPath, JSON.stringify(data))
+    // Create document sections
+    const children: Paragraph[] = []
     
-    // Create Python script file
-    const pythonScript = `import sys
-import json
-import os
-import contextlib
-from io import StringIO
-
-# Redirect print statements to stderr so they don't interfere with stdout
-print_output = StringIO()
-@contextlib.contextmanager
-def redirect_stdout(stream):
-    old_stdout = sys.stdout
-    sys.stdout = stream
-    try:
-        yield
-    finally:
-        sys.stdout = old_stdout
-
-# Add project root to path - handle both local and Vercel environments
-project_root = r'${projectRoot.replace(/\\/g, '/')}'
-if os.path.exists(project_root):
-    sys.path.insert(0, project_root)
-else:
-    # Fallback: try to find resume_builder.py in common locations
-    import sys as sys_module
-    possible_paths = [
-        os.path.join(os.path.dirname(__file__), '..', '..'),
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    ]
-    for possible_path in possible_paths:
-        abs_path = os.path.abspath(possible_path)
-        if os.path.exists(os.path.join(abs_path, 'resume_builder.py')):
-            sys.path.insert(0, abs_path)
-            project_root = abs_path
-            break
-
-from resume_builder import Resume
-
-# Load data from JSON file
-with open(r'${dataPath.replace(/\\/g, '/')}', 'r') as f:
-    data = json.load(f)
-
-# Create resume
-resume = Resume()
-
-# Add header
-resume.add_header(
-    data.get('name', ''),
-    data.get('contact_info', '')
-)
-
-# Add summary
-if data.get('summary'):
-    resume.add_summary(data['summary'])
-
-# Add work experience
-if data.get('work_experience'):
-    resume.add_work_experience_title()
-    for position in data['work_experience']:
-        resume.add_work_experience(
-            position.get('company', ''),
-            position.get('title', ''),
-            position.get('dates', ''),
-            position.get('items', [])
+    // Header: Name (centered, bold, large)
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: data.name || 'Your Name',
+            bold: true,
+            size: 60, // 30pt in half-points
+            font: 'Times New Roman',
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 0 },
+      })
+    )
+    
+    // Header: Contact info (centered)
+    if (data.contact_info) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: data.contact_info,
+              size: 22, // 11pt in half-points
+              font: 'Times New Roman',
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        })
+      )
+    }
+    
+    // Summary
+    if (data.summary) {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: data.summary,
+              size: 22, // 11pt
+              font: 'Times New Roman',
+            }),
+          ],
+          spacing: { after: 400 },
+        })
+      )
+    }
+    
+    // Work Experience
+    if (data.work_experience && data.work_experience.length > 0) {
+      children.push(createParagraphWithBottomBorder('RELEVANT WORK EXPERIENCE', 14))
+      
+      for (const exp of data.work_experience) {
+        // Company name (bold)
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: exp.company || 'Company Name',
+                bold: true,
+                size: 26, // 13pt
+                font: 'Times New Roman',
+              }),
+            ],
+            spacing: { after: 0 },
+          })
         )
-
-# Add skills
-if data.get('skills'):
-    resume.add_skills_title()
-    for skill_section in data['skills']:
-        skill_para = resume.doc.add_paragraph()
-        skill_title = skill_para.add_run(f"{skill_section.get('section_title', '')}: ")
-        skill_title.bold = True
-        skill_para.add_run(skill_section.get('skills', ''))
-
-# Add education
-if data.get('education'):
-    resume.add_education_title()
-    for edu_item in data['education']:
-        resume.add_work_experience(
-            edu_item.get('institution', ''),
-            edu_item.get('degree', ''),
-            edu_item.get('dates', ''),
-            []
+        
+        // Role and dates (with tab for right alignment)
+        const roleText = exp.title || 'Job Title'
+        const datesText = exp.dates || 'Date Range'
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: roleText,
+                bold: true,
+                italics: true,
+                size: 22, // 11pt
+                font: 'Times New Roman',
+              }),
+              new TextRun({
+                text: '\t' + datesText,
+                size: 22,
+                font: 'Times New Roman',
+              }),
+            ],
+            tabStops: [
+              {
+                type: TabStopType.RIGHT,
+                position: TabStopPosition.MAX,
+              },
+            ],
+            spacing: { after: 0 },
+          })
         )
-
-# Save resume (redirect print to stderr)
-with redirect_stdout(print_output):
-    resume.save(r'${docxPath.replace(/\\/g, '/')}')
-
-# Convert to PDF if requested
-if '${format}' == 'pdf':
-    try:
-        with redirect_stdout(print_output):
-            success = resume.save_as_pdf(r'${docxPath.replace(/\\/g, '/')}', r'${pdfPath.replace(/\\/g, '/')}')
-        if success and os.path.exists(r'${pdfPath.replace(/\\/g, '/')}'):
-            print(r'${pdfPath.replace(/\\/g, '/')}')
-        else:
-            # Fallback to DOCX if PDF conversion fails
-            print('DOCX_FALLBACK:' + r'${docxPath.replace(/\\/g, '/')}')
-    except Exception as e:
-        # Fallback to DOCX on any error
-        print('DOCX_FALLBACK:' + r'${docxPath.replace(/\\/g, '/')}')
-else:
-    print(r'${docxPath.replace(/\\/g, '/')}')
-`
-    
-    await writeFile(scriptPath, pythonScript)
-    
-    // Execute Python script
-    // In Vercel, we need to ensure Python can find the modules
-    const pythonPath = isVercel 
-      ? `PYTHONPATH="${projectRoot}:$PYTHONPATH" python3 "${scriptPath}"`
-      : `cd "${projectRoot}" && python3 "${scriptPath}"`
-    
-    const { stdout, stderr } = await execAsync(pythonPath)
-    
-    if (stderr && !stderr.includes('Ignoring wrong pointing object')) {
-      console.error('Python stderr:', stderr)
+        
+        // Bullet points
+        if (exp.items && exp.items.length > 0) {
+          for (const item of exp.items.filter((i: string) => i.trim())) {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: '• ' + item,
+                    size: 22,
+                    font: 'Times New Roman',
+                  }),
+                ],
+                indent: { left: 400 },
+                spacing: { after: 100 },
+              })
+            )
+          }
+        }
+      }
     }
     
-    // Extract the file path from stdout (should be just the path now)
-    let outputPath = stdout.trim()
-    let actualFormat = format
-    
-    // Check if PDF generation failed and fell back to DOCX
-    if (outputPath.startsWith('DOCX_FALLBACK:')) {
-      outputPath = outputPath.replace('DOCX_FALLBACK:', '').trim()
-      actualFormat = 'docx'
-      console.warn('PDF generation failed, falling back to DOCX')
+    // Skills
+    if (data.skills && data.skills.length > 0) {
+      children.push(createParagraphWithBottomBorder('SKILLS', 14))
+      
+      for (const skill of data.skills) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: (skill.section_title || 'Category') + ': ',
+                bold: true,
+                size: 22,
+                font: 'Times New Roman',
+              }),
+              new TextRun({
+                text: skill.skills || 'Skills list',
+                size: 22,
+                font: 'Times New Roman',
+              }),
+            ],
+            spacing: { after: 0 },
+          })
+        )
+      }
     }
     
-    if (!outputPath) {
-      throw new Error(`No output from Python script. Stderr: ${stderr}`)
+    // Education
+    if (data.education && data.education.length > 0) {
+      children.push(createParagraphWithBottomBorder('EDUCATION', 14))
+      
+      for (const edu of data.education) {
+        // Institution (bold)
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: edu.institution || 'Institution Name',
+                bold: true,
+                size: 26, // 13pt
+                font: 'Times New Roman',
+              }),
+            ],
+            spacing: { after: 0 },
+          })
+        )
+        
+        // Degree and dates
+        const degreeText = edu.degree || 'Degree'
+        const datesText = edu.dates || 'Date Range'
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: degreeText,
+                bold: true,
+                italics: true,
+                size: 22,
+                font: 'Times New Roman',
+              }),
+              new TextRun({
+                text: '\t' + datesText,
+                size: 22,
+                font: 'Times New Roman',
+              }),
+            ],
+            tabStops: [
+              {
+                type: TabStopType.RIGHT,
+                position: TabStopPosition.MAX,
+              },
+            ],
+            spacing: { after: 200 },
+          })
+        )
+      }
     }
     
-    if (!fs.existsSync(outputPath)) {
-      throw new Error(`Generated file not found: ${outputPath}. Output was: ${stdout}`)
+    // Create document
+    const doc = new Document({
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: 1440, // 1 inch in twips (20 * 72)
+                right: 720, // 0.5 inch
+                bottom: 1440,
+                left: 720, // 0.5 inch
+              },
+            },
+          },
+          children,
+        },
+      ],
+      styles: {
+        default: {
+          document: {
+            run: {
+              font: 'Times New Roman',
+              size: 22, // 11pt
+            },
+          },
+        },
+      },
+    })
+    
+    // Generate DOCX file
+    const buffer = await Packer.toBuffer(doc)
+    await writeFile(docxPath, buffer)
+    
+    // For PDF, we'll return DOCX for now (PDF conversion requires additional setup)
+    // In a production environment, you might want to use a service like CloudConvert API
+    const actualFormat = format === 'pdf' ? 'docx' : format
+    const outputPath = actualFormat === 'pdf' ? pdfPath : docxPath
+    
+    // If PDF was requested but we're returning DOCX, note it
+    if (format === 'pdf' && actualFormat === 'docx') {
+      console.warn('PDF generation not available on Vercel. Returning DOCX instead.')
     }
     
-    // Read the file and return it
-    const fileBuffer = fs.readFileSync(outputPath)
-    const contentType = actualFormat === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    // Read the file
+    const fileBuffer = fs.readFileSync(docxPath)
+    const contentType = actualFormat === 'pdf' 
+      ? 'application/pdf' 
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     const extension = actualFormat === 'pdf' ? 'pdf' : 'docx'
     
-    // Clean up temp files after a delay (non-blocking)
+    // Clean up temp files after a delay
     setTimeout(async () => {
       try {
-        if (fs.existsSync(outputPath)) await unlink(outputPath)
-        if (actualFormat === 'pdf' && fs.existsSync(docxPath)) await unlink(docxPath)
-        if (fs.existsSync(scriptPath)) await unlink(scriptPath)
-        if (fs.existsSync(dataPath)) await unlink(dataPath)
+        if (fs.existsSync(docxPath)) await unlink(docxPath)
+        if (actualFormat === 'pdf' && fs.existsSync(pdfPath)) await unlink(pdfPath)
       } catch (e) {
         console.error('Error cleaning up temp files:', e)
       }
     }, 5000)
     
-    // Generate a clean download filename (without the unique ID for user-facing name)
+    // Generate download filename
     const downloadBaseName = (data.name || 'resume').replace(/[^a-zA-Z0-9]/g, '_') || 'resume'
     const now = new Date()
-    const month = now.toLocaleString('en-US', { month: 'short' }) // Nov, Dec, etc.
-    const day = String(now.getDate()).padStart(2, '0') // 08, 15, etc.
+    const month = now.toLocaleString('en-US', { month: 'short' })
+    const day = String(now.getDate()).padStart(2, '0')
     const year = now.getFullYear()
     const hours = now.getHours()
     const minutes = String(now.getMinutes()).padStart(2, '0')
     const ampm = hours >= 12 ? 'PM' : 'AM'
-    const hour12 = hours % 12 || 12 // Convert to 12-hour format
+    const hour12 = hours % 12 || 12
     const downloadTimestamp = `${month}-${day}-${year}_${hour12}-${minutes}${ampm}`
     const downloadFilename = `${downloadBaseName}_${downloadTimestamp}.${extension}`
     
-    // If PDF generation failed, return DOCX with a note
     const response = new NextResponse(fileBuffer, {
       headers: {
         'Content-Type': contentType,
@@ -216,7 +327,6 @@ else:
     })
     
     if (format === 'pdf' && actualFormat === 'docx') {
-      // Add a header to indicate fallback
       response.headers.set('X-PDF-Fallback', 'true')
     }
     
@@ -235,4 +345,3 @@ else:
     )
   }
 }
-
